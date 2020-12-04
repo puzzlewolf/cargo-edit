@@ -43,6 +43,11 @@ name = "cargo-upgrade"
 path = "src/bin/upgrade/main.rs"
 required-features = ["upgrade"]
 
+[[bin]]
+name = "cargo-minimize"
+path = "src/bin/minimize/main.rs"
+required-features = ["minimize"]
+
 [badges.appveyor]
 repository = "killercup/cargo-edit"
 
@@ -84,10 +89,12 @@ default = [
     "add",
     "rm",
     "upgrade",
+    "minimize",
 ]
 add = ["cli"]
 rm = ["cli"]
 upgrade = ["cli"]
+minimize = ["cli"]
 cli = ["atty", "structopt"]
 test-external-apis = []
 vendored-openssl = ["git2/vendored-openssl"]

@@ -30,8 +30,9 @@ pub use crate::crate_name::CrateName;
 pub use crate::dependency::Dependency;
 pub use crate::errors::*;
 pub use crate::fetch::{
-    get_crate_name_from_github, get_crate_name_from_gitlab, get_crate_name_from_path,
-    get_latest_dependency, update_registry_index,
+    get_crate_name_from_github, get_crate_name_from_gitlab,
+    get_crate_name_from_path, get_latest_dependency, get_minimal_dependency,
+    update_registry_index,
 };
 pub use crate::manifest::{find, LocalManifest, Manifest};
 pub use crate::metadata::manifest_from_pkgid;

@@ -9,7 +9,7 @@ use std::time::Duration;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use url::Url;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 struct CrateVersion {
     name: String,
     #[serde(rename = "vers")]
@@ -69,12 +69,65 @@ pub fn get_latest_dependency(
     Ok(dep)
 }
 
+/// Query minimal version from a registry index that matches the versionreq.
+///
+/// The registry argument must be specified for crates
+/// from alternative registries.
+///
+/// The minimal version will be returned as a `Dependency`. This will fail, when
+///
+/// - there is no Internet connection and offline is false.
+/// - summaries in registry index with an incorrect format.
+/// - a crate with the given name does not exist on the registry.
+pub fn get_minimal_dependency(
+    crate_name: &str,
+    versionreq: &semver::VersionReq,
+    flag_allow_prerelease: bool,
+    manifest_path: &Path,
+    registry: &Option<Url>,
+) -> Result<Dependency> {
+    if env::var("CARGO_IS_TEST").is_ok() {
+        // We are in a simulated reality. Nothing is real here.
+        // FIXME: Use actual test handling code.
+        let new_version = if flag_allow_prerelease {
+            format!("{}--PRERELEASE_VERSION_TEST", crate_name)
+        } else {
+            match crate_name {
+                "test_breaking" => "0.2.0".to_string(),
+                "test_nonbreaking" => "0.1.1".to_string(),
+                other => format!("{}--CURRENT_VERSION_TEST", other),
+            }
+        };
+
+        return Ok(Dependency::new(crate_name).set_version(&new_version));
+    }
+
+    if crate_name.is_empty() {
+        return Err(ErrorKind::EmptyCrateName.into());
+    }
+
+    let registry_path = match registry {
+        Some(url) => registry_path_from_url(url)?,
+        None => registry_path(manifest_path, None)?,
+    };
+
+    let crate_versions = fuzzy_query_registry_index(crate_name, &registry_path)?;
+
+    let dep = read_minimal_version(&crate_versions, versionreq)?;
+
+    if dep.name != crate_name {
+        println!("WARN: Added `{}` instead of `{}`", dep.name, crate_name);
+    }
+
+    Ok(dep)
+}
+
 // Checks whether a version object is a stable release
 fn version_is_stable(version: &CrateVersion) -> bool {
     !version.version.is_prerelease()
 }
 
-/// Read latest version from Versions structure
+/// Read version from Versions structure
 fn read_latest_version(
     versions: &[CrateVersion],
     flag_allow_prerelease: bool,
@@ -88,6 +141,26 @@ fn read_latest_version(
 
     let name = &latest.name;
     let version = latest.version.to_string();
+    Ok(Dependency::new(name).set_version(&version))
+}
+
+/// Read version from Versions structure
+fn read_minimal_version(
+    versions: &[CrateVersion],
+    versionreq: &semver::VersionReq,
+) -> Result<Dependency> {
+    let minimal = versions
+        .iter()
+        .filter(|&v| version_is_stable(v))
+        .filter(|&v| !v.yanked)
+        .filter(|&v| versionreq.matches(&v.version))
+        .min_by_key(|&v| v.version.clone())
+        .ok_or(ErrorKind::NoVersionsAvailable)?;
+
+    let name = &minimal.name;
+    // Format the version requirement as e.g. =1.2.3.
+    // TODO: Make Dependency take a VersionReq, not a string
+    let version = format!("{}", semver::VersionReq::exact(&minimal.version));
     Ok(Dependency::new(name).set_version(&version))
 }
 
