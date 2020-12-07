@@ -1,3 +1,18 @@
+# cargo minimize
+
+Add `cargo minimize` based on `cargo upgrade`.
+Change all dependency specifications in `Cargo.toml` to exactly the minimal version
+that satisfies the requirements.
+E.g. `anyhow = "1"` becomes `anyhow = "=1.0.0"`.
+
+Check the lower bounds of version requirements by running
+```
+cargo run --bin cargo-minimize minimize --manifest-path=path/to/Cargo.toml
+```
+and see if `cargo clean && cargo update` succeeds :)
+
+# Original README:
+
 # cargo edit
 
 This tool extends [Cargo](http://doc.crates.io/) to allow you to add, remove, and upgrade dependencies by modifying your `Cargo.toml` file from the command line.
