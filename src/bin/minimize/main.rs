@@ -126,11 +126,6 @@ struct Args {
     /// Run without accessing the network
     #[structopt(long = "offline")]
     pub offline: bool,
-
-    // TODO remove
-    /// Upgrade all packages to the version in the lockfile.
-    #[structopt(long = "to-lockfile", conflicts_with = "dependency")]
-    pub to_lockfile: bool,
 }
 
 /// A collection of manifests.
@@ -340,70 +335,6 @@ impl Manifests {
 
         Ok(())
     }
-
-    /// Update dependencies in Cargo.toml file(s) to match the corresponding
-    /// version in Cargo.lock.
-    fn sync_to_lockfile(
-        self,
-        dry_run: bool,
-        skip_compatible: bool,
-    ) -> Result<()> {
-        // Get locked dependencies. For workspaces with multiple Cargo.toml
-        // files, there is only a single lockfile, so it suffices to get
-        // metadata for any one of Cargo.toml files.
-        let (manifest, _package) =
-            self.0.get(0).ok_or(ErrorKind::CargoEditLib(
-                ::cargo_edit::ErrorKind::InvalidCargoConfig,
-            ))?;
-        let mut cmd = cargo_metadata::MetadataCommand::new();
-        cmd.manifest_path(manifest.path.clone());
-        cmd.features(cargo_metadata::CargoOpt::AllFeatures);
-        cmd.other_options(vec!["--locked".to_string()]);
-
-        let result = cmd.exec().map_err(|e| {
-            Error::from(e.compat()).chain_err(|| "Invalid manifest")
-        })?;
-
-        let locked = result
-            .packages
-            .into_iter()
-            .filter(|p| p.source.is_some()) // Source is none for local packages
-            .collect::<Vec<_>>();
-
-        if dry_run {
-            dry_run_message()?;
-        }
-
-        for (mut manifest, package) in self.0 {
-            println!("{}:", package.name);
-
-            // Upgrade the manifests one at a time, as multiple manifests may
-            // request the same dependency at differing versions.
-            for (name, version) in package
-                .dependencies
-                .clone()
-                .into_iter()
-                .filter(is_version_dep)
-                .filter_map(|d| {
-                    for p in &locked {
-                        // The requested dependency may be present in the lock file with different versions,
-                        // but only one will be semver-compatible with the requested version.
-                        if d.name == p.name && d.req.matches(&p.version) {
-                            return Some((d.name, p.version.to_string()));
-                        }
-                    }
-                    None
-                })
-            {
-                manifest.upgrade(
-                    &Dependency::new(&name).set_version(&version),
-                    dry_run,
-                    skip_compatible,
-                )?;
-            }
-        }
-        Ok(())
-    }
 }
 
 // Some metadata about the dependency
@@ -495,7 +426,6 @@ fn process(args: Args) -> Result<()> {
         allow_prerelease,
         dry_run,
         skip_compatible,
-        to_lockfile,
         workspace,
         ..
     } = args;
@@ -508,7 +438,7 @@ fn process(args: Args) -> Result<()> {
 
     let all = workspace || all;
 
-    if !args.offline && !to_lockfile && std::env::var("CARGO_IS_TEST").is_err()
+    if !args.offline && std::env::var("CARGO_IS_TEST").is_err()
     {
         let url = registry_url(&find(&manifest_path)?, None)?;
         update_registry_index(&url)?;
@@ -522,40 +452,36 @@ fn process(args: Args) -> Result<()> {
         Manifests::get_local_one(&manifest_path)
     }?;
 
-    if to_lockfile {
-        manifests.sync_to_lockfile(dry_run, skip_compatible)
-    } else {
-        let existing_dependencies = manifests.get_dependencies(dependency)?;
+    let existing_dependencies = manifests.get_dependencies(dependency)?;
 
-        // Update indices for any alternative registries, unless
-        // we're offline.
-        if !args.offline && std::env::var("CARGO_IS_TEST").is_err() {
-            for registry_url in existing_dependencies
-                .0
+    // Update indices for any alternative registries, unless
+    // we're offline.
+    if !args.offline && std::env::var("CARGO_IS_TEST").is_err() {
+        for registry_url in existing_dependencies
+            .0
                 .values()
                 .filter_map(|UpgradeMetadata { registry, .. }| {
                     registry.as_ref()
                 })
-                .collect::<HashSet<_>>()
-            {
-                update_registry_index(&Url::parse(registry_url).map_err(
+        .collect::<HashSet<_>>()
+        {
+            update_registry_index(&Url::parse(registry_url).map_err(
                     |_| {
                         ErrorKind::CargoEditLib(
                             ::cargo_edit::ErrorKind::InvalidCargoConfig,
-                        )
+                            )
                     },
-                )?)?;
-            }
+                    )?)?;
         }
-
-        // get minimized versions
-        let minimized_dependencies = existing_dependencies
-            .get_upgraded(allow_prerelease, &find(&manifest_path)?)?;
-
-        // TODO remove skip_compatible flag
-        // downgrade to exact version
-        manifests.upgrade(&minimized_dependencies, dry_run, skip_compatible)
     }
+
+    // get minimized versions
+    let minimized_dependencies = existing_dependencies
+        .get_upgraded(allow_prerelease, &find(&manifest_path)?)?;
+
+    // TODO remove skip_compatible flag
+    // downgrade to exact version
+    manifests.upgrade(&minimized_dependencies, dry_run, skip_compatible)
 }
 
 fn main() {
