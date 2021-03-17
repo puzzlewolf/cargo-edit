@@ -9,7 +9,49 @@ Check the lower bounds of version requirements by running
 ```
 cargo run --bin cargo-minimize minimize --manifest-path=path/to/Cargo.toml
 ```
-and see if `cargo clean && cargo update` succeeds :)
+and see if `cargo clean && cargo update && cargo test` succeeds :)
+
+### `cargo minimize`
+
+Downgrade and pin dependencies in your `Cargo.toml` to exactly the minimal versions previously specified there.
+
+This is inteded as a tool to test the minimal versions of a project's dependencies, not as a permanent change to the `Cargo.toml`.
+
+#### Examples
+
+```sh
+# downgrade all dependencies for the current crate
+$ cargo minimize
+# Upgrade docopt (to ~0.9) and serde (to >=0.9,<2.0)
+$ cargo upgrade docopt@~0.9 serde@>=0.9,<2.0
+# Upgrade regex (to the latest version) across all crates in the workspace
+$ cargo upgrade regex --workspace
+```
+
+#### Usage
+
+```plain
+$ cargo minimze -h
+cargo-minimze
+Downgrade and pin dependencies in your `Cargo.toml` to exactly the minimal versions previously specified there.
+
+USAGE:
+    cargo minimize [FLAGS] [OPTIONS] [dependency]...
+
+FLAGS:
+        --workspace           Upgrade all packages in the workspace
+        --dry-run             Print changes to be made without making them
+    -h, --help                Prints help information
+        --offline             Run without accessing the network
+    -V, --version             Prints version information
+
+OPTIONS:
+        --manifest-path <path>    Path to the manifest to upgrade
+    -p, --package <package>       Specify the package in the workspace to add a dependency to (see `cargo help pkgid`)
+
+ARGS:
+    <dependency>...    Crates to be upgraded
+```
 
 # Original README:
 
@@ -242,7 +284,7 @@ upgrade to for each can be specified with e.g. `docopt@0.8.0` or `serde@>=0.9,<2
 Dev, build, and all target dependencies will also be upgraded. Only dependencies from crates.io are
 supported. Git/path dependencies will be ignored.
 
-All packages in the workspace will be upgraded if the `--workspace` flag is supplied. 
+All packages in the workspace will be upgraded if the `--workspace` flag is supplied.
 The `--workspace` flag may be supplied in the presence of a virtual manifest.
 
 If the '--to-lockfile' flag is supplied, all dependencies will be upgraded to the currently locked
